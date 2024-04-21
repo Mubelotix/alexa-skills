@@ -1,10 +1,10 @@
 #![allow(clippy::enum_variant_names)]
 
-use std::{collections::HashMap, env, hash::Hash, sync::RwLock};
+use std::{collections::HashMap, env};
 use serde::{Serialize, Deserialize};
 use actix_web::{post, web::{Data, Json}, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-and-response-json-reference.html#request-format
 
@@ -85,13 +85,24 @@ struct AppState {
 async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -> Result<String, String> {
     match intent.name.as_str() {
         "SetDefaultDeparture" => {
-            let departure = intent.slots.get("depart").ok_or(String::from("Lieu de départ manquant."))?;
-            let departure = departure.value.as_ref().ok_or(String::from("Lieu de départ manquant."))?;
+            let departure = intent.slots.get("depart").and_then(|d| d.value.as_ref()).ok_or(String::from("Lieu de départ manquant."))?;
 
-            data.default_departures.write().unwrap().insert(session.user.user_id.clone(), departure.clone());
+            data.default_departures.write().await.insert(session.user.user_id.clone(), departure.clone());
 
             Ok(format!("Votre lieu de départ par défaut est maintenant {departure}. Vous ne devrez plus le préciser à chaque fois."))
         },
+        "LeaveTimeIntent" => {
+            let departure = match intent.slots.get("depart").and_then(|d| d.value.as_ref()) {
+                Some(departure) => departure.to_owned(),
+                None => data.default_departures.read().await.get(&session.user.user_id).ok_or(String::from("Lieu de départ manquant."))?.to_owned()
+            };
+            let destination = match intent.slots.get("destination").and_then(|d| d.value.as_ref()) {
+                Some(destination) => destination.to_owned(),
+                None => data.default_destinations.read().await.get(&session.user.user_id).ok_or(String::from("Lieu de destination manquant."))?.to_owned()
+            };
+
+            Ok(format!("Vous partez de {departure} et vous allez à {destination}."))
+        }
         _ => Err(String::from("Désolé, je ne suis pas capable de traiter cette requête"))
     }
 }
