@@ -17,6 +17,8 @@ jobs:
     #  run: sudo apt-get update && sudo apt-get install -y curl
 
     - name: Login to Semaphore
+      env:
+        ANSIBLE_PASSWORD: ${{ secrets.ANSIBLE_PASSWORD }}
       run: |
         response=$(curl -X POST -d "{\"auth\": \"ci\", \"password\": \"$ANSIBLE_PASSWORD\"}" -c cookies.txt -w "%{http_code}" -o /dev/null https://semaphore.mubelotix.xyz/api/auth/login)
         if [ "$response" -lt 200 ] || [ "$response" -ge 300 ]; then
