@@ -33,10 +33,28 @@ struct Session {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct Slot {
+    confirmation_status: String,
+    name: String,
+    resolutions: Option<Value>,
+    slot_value: SlotValue,
+    value: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all_fields = "camelCase")]
+#[serde(tag = "type")]
+enum SlotValue {
+    Simple { resolutions: Value, value: String },
+    List { values: Vec<SlotValue> },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Intent {
     name: String,
     confirmation_status: String,
-    slots: HashMap<String, Value>
+    slots: HashMap<String, Slot>
 }
 
 
