@@ -2,14 +2,13 @@
 #![recursion_limit = "256"]
 
 use std::{collections::HashMap, env, time::Duration};
-use serde::{Serialize, Deserialize};
-use actix_web::{post, rt::spawn, web::{Data, Json}, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
+use serde::Deserialize;
+use actix_web::{get, post, rt::spawn, web::{Data, Json}, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
-use string_tools::{get_all_before_strict, get_all_between_strict};
-use tokio::{sync::{Mutex, RwLock}, time::sleep, fs};
+use string_tools::get_all_between_strict;
+use tokio::{sync::RwLock, time::sleep, fs};
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-and-response-json-reference.html#request-format
-
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -219,6 +218,17 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
     }
 }
 
+#[get("privacy")]
+async fn privacy() -> impl Responder {
+    HttpResponse::Ok().append_header(("Content-Type", "text/plain")).body(r#"Ce skill Alexa collecte et stocke uniquement les lieux de départ et de destination par défaut que vous fournissez (si vous le souhaitez). Ces informations ne peuvent pas être associées directement à votre identité et sont utilisées uniquement pour répondre à vos demandes.
+
+    Vous avez le contrôle total sur vos données. Si vous souhaitez supprimer les informations stockées, vous pouvez le faire en envoyant un e-mail à mubelotix@gmail.com ou en demandant au skill de supprimer ses données.
+
+    Nous respectons votre vie privée et nous nous engageons à protéger vos informations personnelles.
+
+    Pour toute question ou préoccupation concernant la confidentialité, veuillez nous contacter à l'adresse e-mail indiquée ci-dessus."#)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Load data from file
@@ -269,6 +279,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(data.clone())
             .service(index)
+            .service(privacy)
     });
 
     let port = env::var("PORT").unwrap_or("8080".to_string());
