@@ -87,7 +87,9 @@ struct AppState {
 async fn get_route(stop_id: usize, line_id: usize, sens: usize) -> Result<Option<usize>, String> {
     let url = "https://www.reseau-astuce.fr/fr/horaires-a-larret/28/StopTimeTable/NextDeparture";
     let response = reqwest::Client::new().post(url)
-        .body(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={stop_id}&lineId={line_id}&sens={sens}"))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
+        .body(dbg!(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={stop_id}&lineId={line_id}&sens={sens}")))
         .send().await.map_err(|e| format!("Erreur lors de la requête: {e}"))?;
     let response = response.text().await.map_err(|e| format!("Erreur lors de la lecture de la réponse: {e}"))?;
     if response.contains("Pas de prochain") {
