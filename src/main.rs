@@ -57,6 +57,7 @@ enum SlotValue {
 struct Intent {
     name: String,
     confirmation_status: String,
+    #[serde(default)]
     slots: HashMap<String, Slot>
 }
 
