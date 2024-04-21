@@ -225,6 +225,7 @@ dependencies = [
  "actix-web",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

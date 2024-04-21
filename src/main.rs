@@ -1,9 +1,10 @@
 #![allow(clippy::enum_variant_names)]
 
-use std::{collections::HashMap, env};
+use std::{collections::HashMap, env, hash::Hash, sync::RwLock};
 use serde::{Serialize, Deserialize};
-use actix_web::{post, web::Json, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web::{Data, Json}, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
+use tokio::sync::Mutex;
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-and-response-json-reference.html#request-format
 
@@ -37,7 +38,7 @@ struct Slot {
     confirmation_status: String,
     name: String,
     resolutions: Option<Value>,
-    slot_value: SlotValue,
+    slot_value: Option<SlotValue>,
     value: Option<String>,
 }
 
@@ -76,11 +77,18 @@ struct AlexaRequest {
     request: Request,
 }
 
-async fn handle_intent(intent: Intent) -> Result<String, String> {
+struct AppState {
+    default_departures: RwLock<HashMap<String, String>>,
+    default_destinations: RwLock<HashMap<String, String>>,
+}
+
+async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -> Result<String, String> {
     match intent.name.as_str() {
         "SetDefaultDeparture" => {
             let departure = intent.slots.get("depart").ok_or(String::from("Lieu de départ manquant."))?;
             let departure = departure.value.as_ref().ok_or(String::from("Lieu de départ manquant."))?;
+
+            data.default_departures.write().unwrap().insert(session.user.user_id.clone(), departure.clone());
 
             Ok(format!("Votre lieu de départ par défaut est maintenant {departure}. Vous ne devrez plus le préciser à chaque fois."))
         },
@@ -89,7 +97,7 @@ async fn handle_intent(intent: Intent) -> Result<String, String> {
 }
 
 #[post("/")]
-async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
+async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> impl Responder {
     // print all headers and body
     //println!("{:?}", req.headers());
     //println!("{:?}", info);
@@ -133,8 +141,8 @@ async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
                 }
             }
         )),
-        Request::IntentRequest { intent, .. } => match handle_intent(intent).await {
-            Ok(response) => HttpResponse::Ok().json(json!(
+        Request::IntentRequest { intent, .. } => match handle_intent(alexa_request.session, intent, data).await {
+            Ok(response) | Err(response) => HttpResponse::Ok().json(json!(
                 {
                     "version": "1.0",
                     "response": {
@@ -142,19 +150,7 @@ async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
                             "type": "PlainText",
                             "text": response
                         },
-                        "shouldEndSession": true
-                    }
-                }
-            )),
-            Err(e) => HttpResponse::Ok().json(json!(
-                {
-                    "version": "1.0",
-                    "response": {
-                        "outputSpeech": {
-                            "type": "PlainText",
-                            "text": e
-                        },
-                        "shouldEndSession": true
+                        "shouldEndSession": false
                     }
                 }
             )),
@@ -165,8 +161,14 @@ async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let server = HttpServer::new(|| {
+    let data = Data::new(AppState {
+        default_departures: RwLock::new(HashMap::new()),
+        default_destinations: RwLock::new(HashMap::new()),
+    });
+
+    let server = HttpServer::new(move || {
         App::new()
+            .app_data(data.clone())
             .service(index)
     });
 
