@@ -79,8 +79,8 @@ struct AlexaRequest {
 #[post("/")]
 async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
     // print all headers and body
-    println!("{:?}", req.headers());
-    println!("{:?}", info);
+    //println!("{:?}", req.headers());
+    //println!("{:?}", info);
 
     let alexa_request: AlexaRequest = match serde_json::from_value(info.0.clone()) {
         Ok(request) => request,
@@ -102,24 +102,39 @@ async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
     };
     println!("{:#?}", alexa_request);
 
-    HttpResponse::Ok().json(json!(
-        {
-            "version": "1.0",
-            "response": {
-                "outputSpeech": {
-                    "type": "PlainText",
-                    "text": "Où voulez-vous aller ?"
-                },
-                "reprompt": {
+    match alexa_request.request {
+        Request::LaunchRequest { .. } => HttpResponse::Ok().json(json!(
+            {
+                "version": "1.0",
+                "response": {
                     "outputSpeech": {
                         "type": "PlainText",
                         "text": "Où voulez-vous aller ?"
-                    }
-                },
-                "shouldEndSession": false
+                    },
+                    "reprompt": {
+                        "outputSpeech": {
+                            "type": "PlainText",
+                            "text": "Où voulez-vous aller ?"
+                        }
+                    },
+                    "shouldEndSession": false
+                }
             }
-        }
-    ))
+        )),
+        Request::IntentRequest { intent, .. } => HttpResponse::Ok().json(json!(
+            {
+                "version": "1.0",
+                "response": {
+                    "outputSpeech": {
+                        "type": "PlainText",
+                        "text": format!("Vous avez demandé d'aller à {}", intent.name)
+                    },
+                    "shouldEndSession": false
+                }
+            }
+        )),
+        Request::SessionEndedRequest { .. } => HttpResponse::Ok().body(()),
+    }
 }
 
 #[actix_web::main]
