@@ -15,7 +15,7 @@ async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
             "response": {
                 "outputSpeech": {
                     "type": "PlainText",
-                    "text": "Test réussi !"
+                    "text": "Où voulez-vous aller ?"
                 },
                 "reprompt": {
                     "outputSpeech": {
