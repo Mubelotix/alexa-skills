@@ -46,7 +46,7 @@ struct Intent {
 #[serde(tag = "type")]
 enum Request {
     LaunchRequest { request_id: String, timestamp: String, locale: String },
-    IntentRequest { request_id: String, timestamp: String, dialog_state: String, intent: Intent, locale: String },
+    IntentRequest { request_id: String, timestamp: String, dialog_state: Option<String>, intent: Intent, locale: String },
     SessionEndedRequest { request_id: String, timestamp: String, reason: String, locale: String, error: Option<Value> },
 }
 
