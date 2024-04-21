@@ -1,15 +1,26 @@
 use std::env;
 
-use actix_web::{post, web::Json, App, Error as ActixError, HttpRequest, HttpServer};
-use serde_json::Value;
+use actix_web::{post, web::Json, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
+use serde_json::{json, Value};
 
 #[post("/")]
-async fn index(req: HttpRequest, info: Json<Value>) -> Result<String, ActixError> {
+async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
     // print all headers and body
     println!("{:?}", req.headers());
     println!("{:?}", info);
 
-    Ok(String::from("Hello world!"))
+    HttpResponse::Ok().json(json!(
+        {
+            "version": "1.0",
+            "response": {
+                "outputSpeech": {
+                    "type": "PlainText",
+                    "text": "Quand voulez-vous partir ?"
+                },
+                //"shouldEndSession": true
+            }
+        }
+    ))
 }
 
 #[actix_web::main]
