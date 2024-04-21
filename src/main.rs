@@ -1,12 +1,12 @@
 #![allow(clippy::enum_variant_names)]
 #![recursion_limit = "256"]
 
-use std::{collections::HashMap, env};
+use std::{collections::HashMap, env, time::Duration};
 use serde::{Serialize, Deserialize};
-use actix_web::{post, web::{Data, Json}, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{post, rt::spawn, web::{Data, Json}, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
 use string_tools::{get_all_before_strict, get_all_between_strict};
-use tokio::sync::{Mutex, RwLock};
+use tokio::{sync::{Mutex, RwLock}, time::sleep, fs};
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-and-response-json-reference.html#request-format
 
@@ -221,9 +221,48 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let data = Data::new(AppState {
-        default_departures: RwLock::new(HashMap::new()),
-        default_destinations: RwLock::new(HashMap::new()),
+    // Load data from file
+    let data = match fs::read("data.json").await {
+        Ok(data) => {
+            let data: Value = serde_json::from_slice(&data).unwrap();
+            let default_departures = data["default_departures"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect();
+            let default_destinations = data["default_destinations"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect();
+            Data::new(AppState {
+                default_departures: RwLock::new(default_departures),
+                default_destinations: RwLock::new(default_destinations),
+            })
+        },
+        Err(_) => {
+            println!("No data could be restored.");
+            Data::new(AppState {
+                default_departures: RwLock::new(HashMap::new()),
+                default_destinations: RwLock::new(HashMap::new()),
+            })
+        }
+    };
+
+    // Save data periodically
+    let data2 = data.clone();
+    spawn(async move {
+        let mut previous_len = 0;
+        loop {
+            let default_departures = data2.default_departures.read().await.clone();
+            let default_destinations = data2.default_destinations.read().await.clone();
+
+            let data = json!({
+                "default_departures": default_departures,
+                "default_destinations": default_destinations
+            });
+            let data = serde_json::to_string(&data).unwrap();
+            if data.len() != previous_len && data.len() <= 50_000_000 {
+                previous_len = data.len();
+                if let Err(e) = fs::write("data.json", data).await {
+                    println!("Error: {:?}", e)
+                }
+            }
+
+            sleep(Duration::from_secs(3*60)).await;
+        }
     });
 
     let server = HttpServer::new(move || {
