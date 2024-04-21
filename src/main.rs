@@ -117,6 +117,17 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
 
             Ok(format!("Votre lieu de destination par défaut est maintenant {destination}. Vous ne devrez plus le préciser à chaque fois."))
         },
+        "AskDefaults" => {
+            let departure = data.default_departures.read().await.get(&session.user.user_id).cloned();
+            let destination = data.default_destinations.read().await.get(&session.user.user_id).cloned();
+
+            match (departure, destination) {
+                (Some(departure), Some(destination)) => Ok(format!("Votre lieu de départ par défaut est {departure} et votre lieu de destination par défaut est {destination}.")),
+                (Some(departure), None) => Ok(format!("Votre lieu de départ par défaut est {departure} mais vous n'avez pas de lieu de destination par défaut.")),
+                (None, Some(destination)) => Ok(format!("Vous lieu de destination par défaut est {destination} mais vous n'avez pas de lieu de départ par défaut.")),
+                (None, None) => Ok(String::from("Vous n'avez ni lieu de départ ni lieu de destination par défaut."))
+            }
+        }
         "LeaveTimeIntent" => {
             let departure = match intent.slots.get("depart").and_then(|d| d.value.as_ref()) {
                 Some(departure) => departure.to_owned(),
