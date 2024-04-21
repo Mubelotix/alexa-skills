@@ -128,6 +128,12 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
                 (None, None) => Ok(String::from("Vous n'avez ni lieu de départ ni lieu de destination par défaut."))
             }
         }
+        "DeleteData" => {
+            data.default_departures.write().await.remove(&session.user.user_id);
+            data.default_destinations.write().await.remove(&session.user.user_id);
+
+            Ok(String::from("Toutes vos données ont été supprimées."))
+        }
         "LeaveTimeIntent" => {
             let departure = match intent.slots.get("depart").and_then(|d| d.value.as_ref()) {
                 Some(departure) => departure.to_owned(),
