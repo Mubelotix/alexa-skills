@@ -76,6 +76,18 @@ struct AlexaRequest {
     request: Request,
 }
 
+async fn handle_intent(intent: Intent) -> Result<String, String> {
+    match intent.name.as_str() {
+        "SetDefaultDeparture" => {
+            let departure = intent.slots.get("depart").ok_or(String::from("Lieu de départ manquant."))?;
+            let departure = departure.value.as_ref().ok_or(String::from("Lieu de départ manquant."))?;
+
+            Ok(format!("Votre lieu de départ par défaut est maintenant {departure}. Vous ne devrez plus le préciser à chaque fois."))
+        },
+        _ => Err(String::from("Désolé, je ne suis pas capable de traiter cette requête"))
+    }
+}
+
 #[post("/")]
 async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
     // print all headers and body
@@ -121,18 +133,32 @@ async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
                 }
             }
         )),
-        Request::IntentRequest { intent, .. } => HttpResponse::Ok().json(json!(
-            {
-                "version": "1.0",
-                "response": {
-                    "outputSpeech": {
-                        "type": "PlainText",
-                        "text": format!("Vous avez demandé d'aller à {}", intent.name)
-                    },
-                    "shouldEndSession": false
+        Request::IntentRequest { intent, .. } => match handle_intent(intent).await {
+            Ok(response) => HttpResponse::Ok().json(json!(
+                {
+                    "version": "1.0",
+                    "response": {
+                        "outputSpeech": {
+                            "type": "PlainText",
+                            "text": response
+                        },
+                        "shouldEndSession": true
+                    }
                 }
-            }
-        )),
+            )),
+            Err(e) => HttpResponse::Ok().json(json!(
+                {
+                    "version": "1.0",
+                    "response": {
+                        "outputSpeech": {
+                            "type": "PlainText",
+                            "text": e
+                        },
+                        "shouldEndSession": true
+                    }
+                }
+            )),
+        },
         Request::SessionEndedRequest { .. } => HttpResponse::Ok().body(()),
     }
 }
