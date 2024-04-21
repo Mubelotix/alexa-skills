@@ -1,3 +1,5 @@
+#![allow(clippy::enum_variant_names)]
+
 use std::{collections::HashMap, env};
 use serde::{Serialize, Deserialize};
 use actix_web::{post, web::Json, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
@@ -40,7 +42,7 @@ struct Intent {
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-types-reference.html#canfulfillintentrequest
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all_fields = "camelCase")]
 #[serde(tag = "type")]
 enum Request {
     LaunchRequest { request_id: String, timestamp: String, locale: String },
