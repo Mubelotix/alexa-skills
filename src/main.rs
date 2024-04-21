@@ -1,9 +1,11 @@
 #![allow(clippy::enum_variant_names)]
+#![recursion_limit = "256"]
 
 use std::{collections::HashMap, env};
 use serde::{Serialize, Deserialize};
 use actix_web::{post, web::{Data, Json}, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
+use string_tools::{get_all_before_strict, get_all_between_strict};
 use tokio::sync::{Mutex, RwLock};
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-and-response-json-reference.html#request-format
@@ -82,6 +84,21 @@ struct AppState {
     default_destinations: RwLock<HashMap<String, String>>,
 }
 
+async fn get_route(stop_id: usize, line_id: usize, sens: usize) -> Result<Option<usize>, String> {
+    let url = "https://www.reseau-astuce.fr/fr/horaires-a-larret/28/StopTimeTable/NextDeparture";
+    let response = reqwest::Client::new().post(url)
+        .body(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={stop_id}&lineId={line_id}&sens={sens}"))
+        .send().await.map_err(|e| format!("Erreur lors de la requête: {e}"))?;
+    let response = response.text().await.map_err(|e| format!("Erreur lors de la lecture de la réponse: {e}"))?;
+    if response.contains("Pas de prochain d&#233;part") {
+        return Ok(None);
+    }
+    let time = get_all_between_strict(&response, " ", "<abbr title=\"minutes\">").ok_or(String::from("Horaires indisponibles"))?;
+    let time = time.parse::<usize>().map_err(|_| String::from("Horaires invalides."))?;
+
+    Ok(Some(time))
+}
+
 async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -> Result<String, String> {
     match intent.name.as_str() {
         "SetDefaultDeparture" => {
@@ -101,7 +118,12 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
                 None => data.default_destinations.read().await.get(&session.user.user_id).ok_or(String::from("Lieu de destination manquant."))?.to_owned()
             };
 
-            Ok(format!("Vous partez de {departure} et vous allez à {destination}."))
+            let time_left = get_route(202300, 327, 1).await?;
+
+            match time_left {
+                Some(time) => Ok(format!("Le prochain tram pour aller de {departure} à {destination} part dans {time} minutes.")),
+                None => Ok(format!("Il n'y a pas de tram pour aller de {departure} à {destination} dans les prochaines heures."))
+            }
         }
         _ => Err(String::from("Désolé, je ne suis pas capable de traiter cette requête"))
     }
