@@ -18,8 +18,16 @@ jobs:
 
     - name: Login to Semaphore
       run: |
-        curl -X POST -d "{\"auth\": \"ci\", \"password\": \"$ANSIBLE_PASSWORD\"}" -c cookies.txt https://semaphore.mubelotix.xyz/api/auth/login -v
+        response=$(curl -X POST -d "{\"auth\": \"ci\", \"password\": \"$ANSIBLE_PASSWORD\"}" -c cookies.txt -w "%{http_code}" -o /dev/null https://semaphore.mubelotix.xyz/api/auth/login)
+        if [ "$response" -lt 200 ] || [ "$response" -ge 300 ]; then
+          echo "Login to Semaphore failed with status code $response"
+          exit 1
+        fi
 
     - name: Launch Task on Semaphore
       run: |
-        curl -X POST -b cookies.txt -d '{"template_id": 24}' https://semaphore.mubelotix.xyz/api/project/1/tasks -v
+        response=$(curl -X POST -b cookies.txt -d '{"template_id": 24}' -w "%{http_code}" -o /dev/null https://semaphore.mubelotix.xyz/api/project/1/tasks)
+        if [ "$response" -lt 200 ] || [ "$response" -ge 300 ]; then
+          echo "Launching Task on Semaphore failed with status code $response"
+          exit 1
+        fi
