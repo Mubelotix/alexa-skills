@@ -110,6 +110,13 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
 
             Ok(format!("Votre lieu de départ par défaut est maintenant {departure}. Vous ne devrez plus le préciser à chaque fois."))
         },
+        "SetDefaultDestination" => {
+            let destination = intent.slots.get("destination").and_then(|d| d.value.as_ref()).ok_or(String::from("Lieu de destination manquant."))?;
+
+            data.default_destinations.write().await.insert(session.user.user_id.clone(), destination.clone());
+
+            Ok(format!("Votre lieu de destination par défaut est maintenant {destination}. Vous ne devrez plus le préciser à chaque fois."))
+        },
         "LeaveTimeIntent" => {
             let departure = match intent.slots.get("depart").and_then(|d| d.value.as_ref()) {
                 Some(departure) => departure.to_owned(),
