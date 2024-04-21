@@ -125,7 +125,7 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             match (departure, destination) {
                 (Some(departure), Some(destination)) => Ok(format!("Votre lieu de départ par défaut est {departure} et votre lieu de destination par défaut est {destination}.")),
                 (Some(departure), None) => Ok(format!("Votre lieu de départ par défaut est {departure} mais vous n'avez pas de lieu de destination par défaut.")),
-                (None, Some(destination)) => Ok(format!("Vous lieu de destination par défaut est {destination} mais vous n'avez pas de lieu de départ par défaut.")),
+                (None, Some(destination)) => Ok(format!("Votre lieu de destination par défaut est {destination} mais vous n'avez pas de lieu de départ par défaut.")),
                 (None, None) => Ok(String::from("Vous n'avez ni lieu de départ ni lieu de destination par défaut."))
             }
         }
