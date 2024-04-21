@@ -220,13 +220,7 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
 
 #[get("privacy")]
 async fn privacy() -> impl Responder {
-    HttpResponse::Ok().append_header(("Content-Type", "text/plain")).body(r#"Ce skill Alexa collecte et stocke uniquement les lieux de départ et de destination par défaut que vous fournissez (si vous le souhaitez). Ces informations ne peuvent pas être associées directement à votre identité et sont utilisées uniquement pour répondre à vos demandes.
-
-    Vous avez le contrôle total sur vos données. Si vous souhaitez supprimer les informations stockées, vous pouvez le faire en envoyant un e-mail à mubelotix@gmail.com ou en demandant au skill de supprimer ses données.
-
-    Nous respectons votre vie privée et nous nous engageons à protéger vos informations personnelles.
-
-    Pour toute question ou préoccupation concernant la confidentialité, veuillez nous contacter à l'adresse e-mail indiquée ci-dessus."#)
+    HttpResponse::Ok().append_header(("Content-Type", "text/html")).body(include_str!("../privacy.html"))
 }
 
 #[actix_web::main]
