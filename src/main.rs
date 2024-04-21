@@ -12,10 +12,12 @@ async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
     HttpResponse::Ok().json(json!(
         {
             "version": "1.0",
-            "reprompt": {
-                "outputSpeech": {
-                    "type": "PlainText",
-                    "text": "Quand voulez-vous partir ?"
+            "response": {
+                "reprompt": {
+                    "outputSpeech": {
+                        "type": "PlainText",
+                        "text": "Où voulez-vous aller ?"
+                    }
                 },
                 "shouldEndSession": false
             }
