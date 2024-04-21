@@ -13,6 +13,10 @@ async fn index(req: HttpRequest, info: Json<Value>) -> impl Responder {
         {
             "version": "1.0",
             "response": {
+                "outputSpeech": {
+                    "type": "PlainText",
+                    "text": "Test réussi !"
+                },
                 "reprompt": {
                     "outputSpeech": {
                         "type": "PlainText",
