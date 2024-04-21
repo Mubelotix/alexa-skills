@@ -90,7 +90,7 @@ async fn get_route(stop_id: usize, line_id: usize, sens: usize) -> Result<Option
         .body(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={stop_id}&lineId={line_id}&sens={sens}"))
         .send().await.map_err(|e| format!("Erreur lors de la requête: {e}"))?;
     let response = response.text().await.map_err(|e| format!("Erreur lors de la lecture de la réponse: {e}"))?;
-    if response.contains("Pas de prochain d&#233;part") {
+    if response.contains("Pas de prochain") {
         return Ok(None);
     }
     let time = get_all_between_strict(&response, " ", "<abbr title=\"minutes\">").ok_or(String::from("Horaires indisponibles"))?;
