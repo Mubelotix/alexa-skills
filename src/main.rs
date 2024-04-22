@@ -163,8 +163,8 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
     //println!("{:?}", req.headers());
     //println!("{:?}", info);
 
-    let alexa_request: AlexaRequest = match serde_json::from_value(info.0.clone()) {
-        Ok(request) => request,
+    let AlexaRequest { version, session, context, request } = match serde_json::from_value(info.0.clone()) {
+        Ok(request) => dbg!(request),
         Err(e) => {
             println!("Error: {:?}", e);
             return HttpResponse::Ok().json(json!(
@@ -181,28 +181,49 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
             ))
         }
     };
-    println!("{:#?}", alexa_request);
 
-    match alexa_request.request {
-        Request::LaunchRequest { .. } => HttpResponse::Ok().json(json!(
-            {
-                "version": "1.0",
-                "response": {
-                    "outputSpeech": {
-                        "type": "PlainText",
-                        "text": "Où voulez-vous aller ?"
-                    },
-                    "reprompt": {
+    match request {
+        Request::LaunchRequest { .. } => {
+            let departure = data.default_departures.read().await.get(&session.user.user_id).cloned();
+            let destination = data.default_destinations.read().await.get(&session.user.user_id).cloned();
+
+            if let (Some(departure), Some(destination)) = (departure, destination) {
+                if let Some(time_left) = get_route(202300, 327, 1).await.unwrap() {
+                    return HttpResponse::Ok().json(json!(
+                        {
+                            "version": "1.0",
+                            "response": {
+                                "outputSpeech": {
+                                    "type": "PlainText",
+                                    "text": format!("Le prochain tram pour aller de {departure} à {destination} part dans {time_left} minutes.")
+                                },
+                                "shouldEndSession": false
+                            }
+                        }
+                    ))
+                }
+            }
+
+            HttpResponse::Ok().json(json!(
+                {
+                    "version": "1.0",
+                    "response": {
                         "outputSpeech": {
                             "type": "PlainText",
                             "text": "Où voulez-vous aller ?"
-                        }
-                    },
-                    "shouldEndSession": false
+                        },
+                        "reprompt": {
+                            "outputSpeech": {
+                                "type": "PlainText",
+                                "text": "Où voulez-vous aller ?"
+                            }
+                        },
+                        "shouldEndSession": false
+                    }
                 }
-            }
-        )),
-        Request::IntentRequest { intent, .. } => match handle_intent(alexa_request.session, intent, data).await {
+            ))
+        },
+        Request::IntentRequest { intent, .. } => match handle_intent(session, intent, data).await {
             Ok(response) | Err(response) => HttpResponse::Ok().json(json!(
                 {
                     "version": "1.0",
