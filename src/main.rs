@@ -164,7 +164,7 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             let sens = get_sens(from_stop_id, dbg!(to_stop_id));
             let time_left = get_time_left(dbg!(from_stop_id), 327, dbg!(sens)).await?;
             match time_left {
-                Some(time_left) if time == 0 => Ok(format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes.")),
+                Some(time_left) if time != 0 => Ok(format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes.")),
                 Some(time_left) => Ok(format!("Le prochain tram allant de {departure} à {destination} est dans {time_left} minutes.")),
                 None => Ok(format!("Il n'y a pas de tram pour aller de {departure} à {destination} dans les prochaines heures."))
             }
