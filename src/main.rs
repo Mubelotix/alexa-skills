@@ -161,11 +161,11 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             };
             let destination = STOPS.iter().find(|(_, stop_id, _)| *stop_id == to_stop_id).unwrap().0[0].clone();
 
-            let sens = get_sens(from_stop_id, dbg!(to_stop_id));
-            let time_left = get_time_left(dbg!(from_stop_id), 327, dbg!(sens)).await?;
+            let sens = get_sens(from_stop_id, to_stop_id);
+            let time_left = get_time_left(from_stop_id, 327, sens).await?;
             match time_left {
-                Some(time_left) if time != 0 => Ok(format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes.")),
-                Some(time_left) => Ok(format!("Le prochain tram allant de {departure} à {destination} est dans {time_left} minutes.")),
+                Some(time_left) if time != 0 => Ok(format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tram à {departure}. Le tram vous emmènera à {destination}.")),
+                Some(time_left) => Ok(format!("Vous avez {time_left} minutes pour prendre le prochain tram à {departure} se rendant à {destination}.")),
                 None => Ok(format!("Il n'y a pas de tram pour aller de {departure} à {destination} dans les prochaines heures."))
             }
         }
@@ -215,9 +215,9 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
                             "response": {
                                 "outputSpeech": {
                                     "type": "PlainText",
-                                    "text": match time == 0 {
-                                        true => format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes."),
-                                        false => format!("Le prochain tram allant de {departure} à {destination} est dans {time_left} minutes.")
+                                    "text": match time != 0 {
+                                        true => format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tram à {departure}. Le tram vous emmènera à {destination}."),
+                                        false => format!("Vous avez {time_left} minutes pour prendre le prochain tram à {departure} se rendant à {destination}.")
                                     }
                                 },
                                 "shouldEndSession": false
