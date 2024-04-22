@@ -1,11 +1,13 @@
 #![allow(clippy::enum_variant_names)]
 #![recursion_limit = "256"]
 
+mod routing;
+pub use routing::*;
+
 use std::{collections::HashMap, env, time::Duration};
 use serde::{Serialize, Deserialize};
 use actix_web::{get, post, rt::spawn, web::{Data, Json}, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
-use string_tools::get_all_before_strict;
 use tokio::{sync::RwLock, time::sleep, fs};
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-and-response-json-reference.html#request-format
@@ -83,33 +85,10 @@ struct AlexaRequest {
 struct InnerAppState {
     default_departures: HashMap<String, (String, usize)>,
     default_destinations: HashMap<String, String>,
+    stops: Vec<(Vec<String>, usize, usize)>,
 }
 
 type AppState = RwLock<InnerAppState>;
-
-async fn get_route(stop_id: usize, line_id: usize, sens: usize) -> Result<Option<usize>, String> {
-    let url = "https://www.reseau-astuce.fr/fr/horaires-a-larret/28/StopTimeTable/NextDeparture";
-    let response = reqwest::Client::new().post(url)
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
-        .body(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={stop_id}&lineId={line_id}&sens={sens}"))
-        .send().await.map_err(|e| format!("Erreur lors de la requête: {e}"))?;
-    let response = response.text().await.map_err(|e| format!("Erreur lors de la lecture de la réponse: {e}"))?;
-    if response.contains("Pas de prochain") {
-        return Ok(None);
-    }
-    let response = get_all_before_strict(&response, "<abbr title=\"minutes\">")
-        .and_then(|s| s.rfind(|c: char| c.is_ascii_digit()).map(|i| &s[i..]))
-        .ok_or(String::from("Horaires indisponibles"))?;
-    let time = response.parse::<usize>().map_err(|_| String::from("Horaires invalides."))?;
-
-    Ok(Some(time))
-}
-
-#[test]
-fn test() {
-    println!("{:?}", iso8601::duration("PT10M"))
-}
 
 async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -> Result<String, String> {
     match intent.name.as_str() {
@@ -171,7 +150,7 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
                 None => data.read().await.default_destinations.get(&session.user.user_id).ok_or(String::from("Lieu de destination manquant."))?.to_owned()
             };
 
-            let time_left = get_route(202300, 327, 1).await?;
+            let time_left = get_time_left(202300, 327, 1).await?;
             match time_left {
                 Some(time_left) if time == 0 => Ok(format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes.")),
                 Some(time_left) => Ok(format!("Le prochain tram allant de {departure} à {destination} est dans {time_left} minutes.")),
@@ -213,7 +192,7 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
             let destination = data.read().await.default_destinations.get(&session.user.user_id).cloned();
 
             if let (Some((departure, time)), Some(destination)) = (departure, destination) {
-                if let Some(time_left) = get_route(202300, 327, 1).await.unwrap() {
+                if let Some(time_left) = get_time_left(202300, 327, 1).await.unwrap() {
                     return HttpResponse::Ok().json(json!(
                         {
                             "version": "1.0",
@@ -276,6 +255,16 @@ async fn privacy() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Load network data
+    let mut stops = Vec::new();
+    for line in include_str!("../network.csv").lines() {
+        if line.is_empty() { continue }
+        let mut parts = line.split(',').map(|s| s.to_owned()).collect::<Vec<_>>();
+        let section_id = parts.remove(parts.len()-1).parse::<usize>().unwrap();
+        let stop_id = parts.remove(parts.len()-1).parse::<usize>().unwrap();
+        stops.push((parts, stop_id, section_id));
+    }
+
     // Load data from file
     let data = match fs::read("data.json").await {
         Ok(data) => match serde_json::from_slice(&data) {
@@ -285,6 +274,7 @@ async fn main() -> std::io::Result<()> {
                 Data::new(RwLock::new(InnerAppState {
                     default_departures: HashMap::new(),
                     default_destinations: HashMap::new(),
+                    stops,
                 }))
             }
         }
@@ -293,6 +283,7 @@ async fn main() -> std::io::Result<()> {
             Data::new(RwLock::new(InnerAppState {
                 default_departures: HashMap::new(),
                 default_destinations: HashMap::new(),
+                stops,
             }))
         }
     };
