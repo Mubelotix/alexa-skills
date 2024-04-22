@@ -106,6 +106,11 @@ async fn get_route(stop_id: usize, line_id: usize, sens: usize) -> Result<Option
     Ok(Some(time))
 }
 
+#[test]
+fn test() {
+    println!("{:?}", iso8601::duration("PT10M"))
+}
+
 async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -> Result<String, String> {
     match intent.name.as_str() {
         "SetDefaultDeparture" => {
@@ -113,6 +118,7 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
                 .and_then(|d| d.value.as_ref())
                 .ok_or(String::from("Lieu de départ manquant."))?;
 
+            println!("{:?}", intent.slots.get("temps"));
             let time = intent.slots.get("temps")
                 .and_then(|t| t.value.as_ref())
                 .and_then(|t| iso8601::duration(t).ok())
