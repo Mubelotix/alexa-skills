@@ -4,7 +4,7 @@
 mod routing;
 pub use routing::*;
 
-use std::{collections::HashMap, env, time::Duration};
+use std::{collections::HashMap, env, hash::{DefaultHasher, Hash, Hasher}, time::Duration};
 use serde::{Serialize, Deserialize};
 use actix_web::{get, post, rt::spawn, web::{Data, Json}, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
@@ -306,18 +306,21 @@ async fn main() -> std::io::Result<()> {
     // Save data periodically
     let data2 = data.clone();
     spawn(async move {
-        let mut previous_len = 0;
+        let mut previous_hash = 0;
         loop {
+            sleep(Duration::from_secs(3*60)).await;
+            
             let data = data2.read().await.clone();
             let data = serde_json::to_string(&data).unwrap();
-            if data.len() != previous_len && data.len() <= 50_000_000 {
-                previous_len = data.len();
+            let mut hasher = DefaultHasher::new();
+            data.hash(&mut hasher);
+            let hash = hasher.finish();
+            if hash != previous_hash && data.len() <= 50_000_000 {
+                previous_hash = hash;
                 if let Err(e) = fs::write("data.json", data).await {
                     println!("Error: {:?}", e)
                 }
             }
-
-            sleep(Duration::from_secs(3*60)).await;
         }
     });
 
