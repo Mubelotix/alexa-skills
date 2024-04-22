@@ -118,14 +118,13 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
                 .and_then(|d| d.value.as_ref())
                 .ok_or(String::from("Lieu de départ manquant."))?;
 
-            println!("{:?}", intent.slots.get("temps"));
             let time = intent.slots.get("temps")
-                .and_then(|t| dbg!(t.value.as_ref()))
-                .and_then(|t| dbg!(iso8601::duration(t).ok()))
-                .map(|t| dbg!(match t {
+                .and_then(|t| t.value.as_ref())
+                .and_then(|t| iso8601::duration(t).ok())
+                .map(|t| match t {
                     iso8601::Duration::YMDHMS { year, month, day, hour, minute, second, millisecond } => year * 365 * 24 * 60 + month * 30 * 24 * 60 + day * 24 * 60 + hour * 60 + minute + second / 60 + millisecond / 60000,
                     iso8601::Duration::Weeks(weeks) => weeks * 7 * 24 * 60,
-                }))
+                })
                 .map(|t| t as usize)
                 .unwrap_or(0);
 
