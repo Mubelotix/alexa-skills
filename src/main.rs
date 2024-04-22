@@ -5,7 +5,7 @@ use std::{collections::HashMap, env, time::Duration};
 use serde::Deserialize;
 use actix_web::{get, post, rt::spawn, web::{Data, Json}, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
-use string_tools::{get_all_before_strict, get_all_between_strict};
+use string_tools::get_all_before_strict;
 use tokio::{sync::RwLock, time::sleep, fs};
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-and-response-json-reference.html#request-format
@@ -80,7 +80,7 @@ struct AlexaRequest {
 }
 
 struct AppState {
-    default_departures: RwLock<HashMap<String, String>>,
+    default_departures: RwLock<HashMap<String, (String, usize)>>,
     default_destinations: RwLock<HashMap<String, String>>,
 }
 
@@ -106,9 +106,17 @@ async fn get_route(stop_id: usize, line_id: usize, sens: usize) -> Result<Option
 async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -> Result<String, String> {
     match intent.name.as_str() {
         "SetDefaultDeparture" => {
-            let departure = intent.slots.get("depart").and_then(|d| d.value.as_ref()).ok_or(String::from("Lieu de départ manquant."))?;
+            let departure = intent.slots.get("depart")
+                .and_then(|d| d.value.as_ref())
+                .ok_or(String::from("Lieu de départ manquant."))?;
 
-            data.default_departures.write().await.insert(session.user.user_id.clone(), departure.clone());
+            let time = intent.slots.get("temps")
+                .and_then(|t| t.value.as_ref())
+                .and_then(|t| iso8601::time(t).ok())
+                .map(|t| (t.hour * 60 + t.minute + t.second / 60) as usize)
+                .unwrap_or(0);
+
+            data.default_departures.write().await.insert(session.user.user_id.clone(), (departure.clone(), time));
 
             Ok(format!("Votre lieu de départ par défaut est maintenant {departure}. Vous ne devrez plus le préciser à chaque fois."))
         },
@@ -124,8 +132,10 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             let destination = data.default_destinations.read().await.get(&session.user.user_id).cloned();
 
             match (departure, destination) {
-                (Some(departure), Some(destination)) => Ok(format!("Votre lieu de départ par défaut est {departure} et votre lieu de destination par défaut est {destination}.")),
-                (Some(departure), None) => Ok(format!("Votre lieu de départ par défaut est {departure} mais vous n'avez pas de lieu de destination par défaut.")),
+                (Some((departure, 0)), Some(destination)) => Ok(format!("Votre lieu de départ par défaut est {departure} et votre lieu de destination par défaut est {destination}.")),
+                (Some((departure, time)), Some(destination)) => Ok(format!("Votre lieu de départ par défaut est à {time} minutes de {departure} et votre lieu de destination par défaut est {destination}.")),
+                (Some((departure, 0)), None) => Ok(format!("Votre lieu de départ par défaut est {departure} mais vous n'avez pas de lieu de destination par défaut.")),
+                (Some((departure, time)), None) => Ok(format!("Votre lieu de départ par défaut est à {time} minutes de {departure} mais vous n'avez pas de lieu de destination par défaut.")),
                 (None, Some(destination)) => Ok(format!("Votre lieu de destination par défaut est {destination} mais vous n'avez pas de lieu de départ par défaut.")),
                 (None, None) => Ok(String::from("Vous n'avez ni lieu de départ ni lieu de destination par défaut."))
             }
@@ -137,8 +147,8 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             Ok(String::from("Toutes vos données ont été supprimées."))
         }
         "LeaveTimeIntent" => {
-            let departure = match intent.slots.get("depart").and_then(|d| d.value.as_ref()) {
-                Some(departure) => departure.to_owned(),
+            let (departure, time) = match intent.slots.get("depart").and_then(|d| d.value.as_ref()) {
+                Some(departure) => (departure.to_owned(), 0),
                 None => data.default_departures.read().await.get(&session.user.user_id).ok_or(String::from("Lieu de départ manquant."))?.to_owned()
             };
             let destination = match intent.slots.get("destination").and_then(|d| d.value.as_ref()) {
@@ -147,9 +157,9 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             };
 
             let time_left = get_route(202300, 327, 1).await?;
-
             match time_left {
-                Some(time) => Ok(format!("Le prochain tram pour aller de {departure} à {destination} part dans {time} minutes.")),
+                Some(time_left) if time == 0 => Ok(format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes.")),
+                Some(time_left) => Ok(format!("Le prochain tram allant de {departure} à {destination} est dans {time_left} minutes.")),
                 None => Ok(format!("Il n'y a pas de tram pour aller de {departure} à {destination} dans les prochaines heures."))
             }
         }
@@ -187,7 +197,7 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
             let departure = data.default_departures.read().await.get(&session.user.user_id).cloned();
             let destination = data.default_destinations.read().await.get(&session.user.user_id).cloned();
 
-            if let (Some(departure), Some(destination)) = (departure, destination) {
+            if let (Some((departure, time)), Some(destination)) = (departure, destination) {
                 if let Some(time_left) = get_route(202300, 327, 1).await.unwrap() {
                     return HttpResponse::Ok().json(json!(
                         {
@@ -195,7 +205,10 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
                             "response": {
                                 "outputSpeech": {
                                     "type": "PlainText",
-                                    "text": format!("Le prochain tram pour aller de {departure} à {destination} part dans {time_left} minutes.")
+                                    "text": match time == 0 {
+                                        true => format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes."),
+                                        false => format!("Le prochain tram allant de {departure} à {destination} est dans {time_left} minutes.")
+                                    }
                                 },
                                 "shouldEndSession": false
                             }
@@ -252,7 +265,7 @@ async fn main() -> std::io::Result<()> {
     let data = match fs::read("data.json").await {
         Ok(data) => {
             let data: Value = serde_json::from_slice(&data).unwrap();
-            let default_departures = data["default_departures"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect();
+            let default_departures = data["default_departures"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), (v["0"].as_str().unwrap().to_string(), v["1"].as_u64().unwrap() as usize))).collect();
             let default_destinations = data["default_destinations"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect();
             Data::new(AppState {
                 default_departures: RwLock::new(default_departures),
