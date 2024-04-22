@@ -117,10 +117,10 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
         "SetDefaultDestination" => {
             let destination = intent.slots.get("destination")
                 .and_then(|d| d.value.as_ref())
-                .and_then(|d| get_stop_id(d))
                 .ok_or(String::from("Lieu de destination manquant."))?;
+            let stop_id = get_stop_id(destination).ok_or(String::from("Lieu de destination inconnu."))?;
 
-            data.write().await.default_destinations.insert(session.user.user_id.clone(), destination.clone());
+            data.write().await.default_destinations.insert(session.user.user_id.clone(), stop_id);
 
             Ok(format!("Votre lieu de destination par défaut est maintenant {destination}. Vous ne devrez plus le préciser à chaque fois."))
         },
@@ -155,8 +155,8 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             };
             let destination = STOPS.iter().find(|(_, stop_id, _)| *stop_id == to_stop_id).unwrap().0[0].clone();
 
-            let sens = get_sens(from_stop_id, to_stop_id);
-            let time_left = get_time_left(from_stop_id, 327, sens).await?;
+            let sens = get_sens(from_stop_id, dbg!(to_stop_id));
+            let time_left = get_time_left(dbg!(from_stop_id), 327, dbg!(sens)).await?;
             match time_left {
                 Some(time_left) if time == 0 => Ok(format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes.")),
                 Some(time_left) => Ok(format!("Le prochain tram allant de {departure} à {destination} est dans {time_left} minutes.")),
