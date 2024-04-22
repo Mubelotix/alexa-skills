@@ -125,8 +125,14 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             Ok(format!("Votre lieu de destination par défaut est maintenant {destination}. Vous ne devrez plus le préciser à chaque fois."))
         },
         "AskDefaults" => {
-            let departure = data.read().await.default_departures.get(&session.user.user_id).cloned();
-            let destination = data.read().await.default_destinations.get(&session.user.user_id).cloned();
+            let departure = data.read().await.default_departures
+                .get(&session.user.user_id)
+                .cloned()
+                .map(|(departure, time)| (STOPS.iter().find(|(_, stop_id, _)| *stop_id == departure).unwrap().0[0].clone(), time));
+            let destination = data.read().await.default_destinations
+                .get(&session.user.user_id)
+                .cloned()
+                .map(|destination| STOPS.iter().find(|(_, stop_id, _)| *stop_id == destination).unwrap().0[0].clone());
 
             match (departure, destination) {
                 (Some((departure, 0)), Some(destination)) => Ok(format!("Votre lieu de départ par défaut est {departure} et votre lieu de destination par défaut est {destination}.")),

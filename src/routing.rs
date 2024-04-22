@@ -21,7 +21,7 @@ pub async fn get_time_left(stop_id: usize, line_id: usize, sens: usize) -> Resul
     let response = reqwest::Client::new().post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
-        .body(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={stop_id}&lineId={line_id}&sens={sens}"))
+        .body(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={}&lineId={line_id}&sens={sens}", stop_id + sens))
         .send().await.map_err(|e| format!("Erreur lors de la requête: {e}"))?;
     let response = response.text().await.map_err(|e| format!("Erreur lors de la lecture de la réponse: {e}"))?;
     if response.contains("Pas de prochain") {
