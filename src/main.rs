@@ -47,7 +47,7 @@ struct Slot {
 #[serde(rename_all_fields = "camelCase")]
 #[serde(tag = "type")]
 enum SlotValue {
-    Simple { resolutions: Value, value: String },
+    Simple { resolutions: Option<Value>, value: String },
     List { values: Vec<SlotValue> },
 }
 
