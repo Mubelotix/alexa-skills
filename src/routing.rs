@@ -1,4 +1,20 @@
+use lazy_static::lazy_static;
 use string_tools::get_all_before_strict;
+
+lazy_static!(
+    pub static ref STOPS: Vec<(Vec<String>, usize, usize)> = {
+        // Load network data
+        let mut stops = Vec::new();
+        for line in include_str!("../network.csv").lines() {
+            if line.is_empty() { continue }
+            let mut parts = line.split(',').map(|s| s.to_owned()).collect::<Vec<_>>();
+            let section_id = parts.remove(parts.len()-1).parse::<usize>().unwrap();
+            let stop_id = parts.remove(parts.len()-1).parse::<usize>().unwrap();
+            stops.push((parts, stop_id, section_id));
+        }
+        stops
+    };
+);
 
 pub async fn get_time_left(stop_id: usize, line_id: usize, sens: usize) -> Result<Option<usize>, String> {
     let url = "https://www.reseau-astuce.fr/fr/horaires-a-larret/28/StopTimeTable/NextDeparture";
@@ -19,9 +35,9 @@ pub async fn get_time_left(stop_id: usize, line_id: usize, sens: usize) -> Resul
     Ok(Some(time))
 }
 
-pub async fn get_stop_id(name: &str, stops: &[(Vec<String>, usize, usize)]) -> Option<usize> {
+pub fn get_stop_id(name: &str) -> Option<usize> {
     let mut min = (None, usize::MAX);
-    for stop in stops {
+    for stop in STOPS.iter() {
         for stop_name in &stop.0 {
             let distance = levenshtein::levenshtein(stop_name, name);
             if distance < min.1 {
@@ -32,11 +48,11 @@ pub async fn get_stop_id(name: &str, stops: &[(Vec<String>, usize, usize)]) -> O
     min.0
 }
 
-pub async fn get_sens(from_stop_id: usize, to_stop_id: usize, stops: &[(Vec<String>, usize, usize)]) -> usize {
-    let from_position = stops.iter().position(|(_, stop_id, _)| *stop_id == from_stop_id).unwrap();
-    let to_position = stops.iter().position(|(_, stop_id, _)| *stop_id == to_stop_id).unwrap();
-    let from_section_id = stops[from_position].2;
-    let to_section_id = stops[to_position].2;
+pub fn get_sens(from_stop_id: usize, to_stop_id: usize) -> usize {
+    let from_position = STOPS.iter().position(|(_, stop_id, _)| *stop_id == from_stop_id).unwrap();
+    let to_position = STOPS.iter().position(|(_, stop_id, _)| *stop_id == to_stop_id).unwrap();
+    let from_section_id = STOPS[from_position].2;
+    let to_section_id = STOPS[to_position].2;
 
     match (from_section_id, to_section_id) {
         (1, 2) | (1, 3) => return 1, // From rouen to georges braque or technopole

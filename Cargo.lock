@@ -224,6 +224,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "iso8601",
+ "lazy_static",
  "levenshtein",
  "percent-encoding",
  "reqwest",

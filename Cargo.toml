@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 actix-web = "4.5.1"
 iso8601 = "0.6.1"
+lazy_static = "1.4.0"
 levenshtein = "1.0.5"
 percent-encoding = "2.3.1"
 reqwest = { version = "0.12.4", features = ["json"] }

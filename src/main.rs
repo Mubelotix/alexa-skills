@@ -83,9 +83,8 @@ struct AlexaRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct InnerAppState {
-    default_departures: HashMap<String, (String, usize)>,
-    default_destinations: HashMap<String, String>,
-    stops: Vec<(Vec<String>, usize, usize)>,
+    default_departures: HashMap<String, (usize, usize)>,
+    default_destinations: HashMap<String, usize>,
 }
 
 type AppState = RwLock<InnerAppState>;
@@ -96,6 +95,7 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             let departure = intent.slots.get("depart")
                 .and_then(|d| d.value.as_ref())
                 .ok_or(String::from("Lieu de départ manquant."))?;
+            let stop_id = get_stop_id(departure).ok_or(String::from("Lieu de départ inconnu."))?;
 
             let time = intent.slots.get("temps")
                 .and_then(|t| t.value.as_ref())
@@ -107,7 +107,7 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
                 .map(|t| t as usize)
                 .unwrap_or(0);
 
-            data.write().await.default_departures.insert(session.user.user_id.clone(), (departure.clone(), time));
+            data.write().await.default_departures.insert(session.user.user_id.clone(), (stop_id, time));
 
             Ok(match time {
                 0 => format!("Votre lieu de départ par défaut est maintenant {departure}."),
@@ -115,7 +115,10 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             })
         },
         "SetDefaultDestination" => {
-            let destination = intent.slots.get("destination").and_then(|d| d.value.as_ref()).ok_or(String::from("Lieu de destination manquant."))?;
+            let destination = intent.slots.get("destination")
+                .and_then(|d| d.value.as_ref())
+                .and_then(|d| get_stop_id(d))
+                .ok_or(String::from("Lieu de destination manquant."))?;
 
             data.write().await.default_destinations.insert(session.user.user_id.clone(), destination.clone());
 
@@ -141,16 +144,19 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             Ok(String::from("Toutes vos données ont été supprimées."))
         }
         "LeaveTimeIntent" => {
-            let (departure, time) = match intent.slots.get("depart").and_then(|d| d.value.as_ref()) {
-                Some(departure) => (departure.to_owned(), 0),
+            let (from_stop_id, time) = match intent.slots.get("depart").and_then(|d| d.value.as_ref()) {
+                Some(departure) => (get_stop_id(departure).ok_or(String::from("Lieu de départ inconnu."))?, 0),
                 None => data.read().await.default_departures.get(&session.user.user_id).ok_or(String::from("Lieu de départ manquant."))?.to_owned()
             };
-            let destination = match intent.slots.get("destination").and_then(|d| d.value.as_ref()) {
-                Some(destination) => destination.to_owned(),
+            let departure = STOPS.iter().find(|(_, stop_id, _)| *stop_id == from_stop_id).unwrap().0[0].clone();
+            let to_stop_id = match intent.slots.get("destination").and_then(|d| d.value.as_ref()) {
+                Some(destination) => get_stop_id(destination).ok_or(String::from("Lieu de destination inconnu."))?,
                 None => data.read().await.default_destinations.get(&session.user.user_id).ok_or(String::from("Lieu de destination manquant."))?.to_owned()
             };
+            let destination = STOPS.iter().find(|(_, stop_id, _)| *stop_id == to_stop_id).unwrap().0[0].clone();
 
-            let time_left = get_time_left(202300, 327, 1).await?;
+            let sens = get_sens(from_stop_id, to_stop_id);
+            let time_left = get_time_left(from_stop_id, 327, sens).await?;
             match time_left {
                 Some(time_left) if time == 0 => Ok(format!("Le prochain départ pour aller en {time} minutes à {departure} et prendre le tram jusqu'à {destination} est dans {time_left} minutes.")),
                 Some(time_left) => Ok(format!("Le prochain tram allant de {departure} à {destination} est dans {time_left} minutes.")),
@@ -191,8 +197,12 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
             let departure = data.read().await.default_departures.get(&session.user.user_id).cloned();
             let destination = data.read().await.default_destinations.get(&session.user.user_id).cloned();
 
-            if let (Some((departure, time)), Some(destination)) = (departure, destination) {
-                if let Some(time_left) = get_time_left(202300, 327, 1).await.unwrap() {
+            if let (Some((from_stop_id, time)), Some(to_stop_id)) = (departure, destination) {
+                let departure = STOPS.iter().find(|(_, stop_id, _)| *stop_id == from_stop_id).unwrap().0[0].clone();
+                let destination = STOPS.iter().find(|(_, stop_id, _)| *stop_id == to_stop_id).unwrap().0[0].clone();
+                let sens = get_sens(from_stop_id, to_stop_id);
+                
+                if let Some(time_left) = get_time_left(from_stop_id, 327, sens).await.unwrap() {
                     return HttpResponse::Ok().json(json!(
                         {
                             "version": "1.0",
@@ -255,15 +265,6 @@ async fn privacy() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Load network data
-    let mut stops = Vec::new();
-    for line in include_str!("../network.csv").lines() {
-        if line.is_empty() { continue }
-        let mut parts = line.split(',').map(|s| s.to_owned()).collect::<Vec<_>>();
-        let section_id = parts.remove(parts.len()-1).parse::<usize>().unwrap();
-        let stop_id = parts.remove(parts.len()-1).parse::<usize>().unwrap();
-        stops.push((parts, stop_id, section_id));
-    }
 
     // Load data from file
     let data = match fs::read("data.json").await {
@@ -274,7 +275,6 @@ async fn main() -> std::io::Result<()> {
                 Data::new(RwLock::new(InnerAppState {
                     default_departures: HashMap::new(),
                     default_destinations: HashMap::new(),
-                    stops,
                 }))
             }
         }
@@ -283,7 +283,6 @@ async fn main() -> std::io::Result<()> {
             Data::new(RwLock::new(InnerAppState {
                 default_departures: HashMap::new(),
                 default_destinations: HashMap::new(),
-                stops,
             }))
         }
     };
