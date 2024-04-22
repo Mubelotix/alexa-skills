@@ -162,7 +162,9 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             let destination = STOPS.iter().find(|(_, stop_id, _)| *stop_id == to_stop_id).unwrap().0[0].clone();
 
             let sens = get_sens(from_stop_id, to_stop_id);
-            let time_left = get_time_left(from_stop_id, 327, sens).await?;
+            let mut results = get_time_left(from_stop_id, 327, sens).await?;
+            results.retain(|r| *r > time);
+            let time_left = results.first().cloned().map(|t| t-time);
             match time_left {
                 Some(time_left) if time != 0 => Ok(format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tramway à {departure}. Le tramway vous emmènera à {destination}.")),
                 Some(time_left) => Ok(format!("Vous avez {time_left} minutes pour prendre le prochain tramway à {departure} se rendant à {destination}.")),
@@ -207,23 +209,25 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
                 let departure = STOPS.iter().find(|(_, stop_id, _)| *stop_id == from_stop_id).unwrap().0[0].clone();
                 let destination = STOPS.iter().find(|(_, stop_id, _)| *stop_id == to_stop_id).unwrap().0[0].clone();
                 let sens = get_sens(from_stop_id, to_stop_id);
-                
-                if let Some(time_left) = get_time_left(from_stop_id, 327, sens).await.unwrap() {
-                    return HttpResponse::Ok().json(json!(
-                        {
-                            "version": "1.0",
-                            "response": {
-                                "outputSpeech": {
-                                    "type": "PlainText",
-                                    "text": match time != 0 {
-                                        true => format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tramway à {departure}. Le tramway vous emmènera à {destination}."),
-                                        false => format!("Vous avez {time_left} minutes pour prendre le prochain tramway à {departure} se rendant à {destination}.")
-                                    }
-                                },
-                                "shouldEndSession": false
+                if let Ok(mut results) = get_time_left(from_stop_id, 327, sens).await {
+                    results.retain(|r| *r > time);
+                    if let Some(time_left) = results.first().cloned().map(|t| t-time) {
+                        return HttpResponse::Ok().json(json!(
+                            {
+                                "version": "1.0",
+                                "response": {
+                                    "outputSpeech": {
+                                        "type": "PlainText",
+                                        "text": match time != 0 {
+                                            true => format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tramway à {departure}. Le tramway vous emmènera à {destination}."),
+                                            false => format!("Vous avez {time_left} minutes pour prendre le prochain tramway à {departure} se rendant à {destination}.")
+                                        }
+                                    },
+                                    "shouldEndSession": false
+                                }
                             }
-                        }
-                    ))
+                        ))
+                    }
                 }
             }
 

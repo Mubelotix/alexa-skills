@@ -16,7 +16,7 @@ lazy_static!(
     };
 );
 
-pub async fn get_time_left(stop_id: usize, line_id: usize, sens: usize) -> Result<Option<usize>, String> {
+pub async fn get_time_left(stop_id: usize, line_id: usize, sens: usize) -> Result<Vec<usize>, String> {
     let url = "https://www.reseau-astuce.fr/fr/horaires-a-larret/28/StopTimeTable/NextDeparture";
     let response = reqwest::Client::new().post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -24,15 +24,16 @@ pub async fn get_time_left(stop_id: usize, line_id: usize, sens: usize) -> Resul
         .body(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={}&lineId={line_id}&sens={sens}", stop_id + sens))
         .send().await.map_err(|e| format!("Erreur lors de la requête: {e}"))?;
     let response = response.text().await.map_err(|e| format!("Erreur lors de la lecture de la réponse: {e}"))?;
-    if response.contains("Pas de prochain") {
-        return Ok(None);
+    let mut response = &response[..];
+    let mut results = Vec::new();
+    while let Some(s) = get_all_before_strict(response, "<abbr title=\"minutes\">") {
+        response = response.split_at(s.len() + 22).1;
+        if let Some(r) = s.rfind(|c: char| !c.is_ascii_digit()).map(|i| &s[i+1..]).and_then(|r| r.parse::<usize>().ok()) {
+            results.push(r);
+        }
     }
-    let response = get_all_before_strict(&response, "<abbr title=\"minutes\">")
-        .and_then(|s| s.rfind(|c: char| c.is_ascii_digit()).map(|i| &s[i..]))
-        .ok_or(String::from("Horaires indisponibles"))?;
-    let time = response.parse::<usize>().map_err(|_| String::from("Horaires invalides."))?;
 
-    Ok(Some(time))
+    Ok(results)
 }
 
 pub fn get_stop_id(name: &str) -> Option<usize> {
