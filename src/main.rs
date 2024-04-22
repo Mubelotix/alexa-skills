@@ -264,7 +264,14 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
                 }
             )),
         },
-        Request::SessionEndedRequest { .. } => HttpResponse::Ok().body(()),
+        Request::SessionEndedRequest { .. } => HttpResponse::Ok().json(json!(
+            {
+                "version": "1.0",
+                "response": {
+                    "shouldEndSession": true
+                }
+            }
+        )),
     }
 }
 
@@ -275,7 +282,6 @@ async fn privacy() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-
     // Load data from file
     let data = match fs::read("data.json").await {
         Ok(data) => match serde_json::from_slice(&data) {
