@@ -259,18 +259,29 @@ async fn privacy() -> impl Responder {
     HttpResponse::Ok().append_header(("Content-Type", "text/html")).body(include_str!("../privacy.html"))
 }
 
+fn read_data(data: Vec<u8>) -> Option<Data<AppState>> {
+    let data: Value = serde_json::from_slice(&data).ok()?;
+    let default_departures = data["default_departures"].as_object()?.iter().map(|(k, v)| (k.clone(), (v["0"].as_str().unwrap().to_string(), v["1"].as_u64().unwrap() as usize))).collect();
+    let default_destinations = data["default_destinations"].as_object()?.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect();
+    Some(Data::new(AppState {
+        default_departures: RwLock::new(default_departures),
+        default_destinations: RwLock::new(default_destinations),
+    }))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Load data from file
     let data = match fs::read("data.json").await {
-        Ok(data) => {
-            let data: Value = serde_json::from_slice(&data).unwrap();
-            let default_departures = data["default_departures"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), (v["0"].as_str().unwrap().to_string(), v["1"].as_u64().unwrap() as usize))).collect();
-            let default_destinations = data["default_destinations"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())).collect();
-            Data::new(AppState {
-                default_departures: RwLock::new(default_departures),
-                default_destinations: RwLock::new(default_destinations),
-            })
+        Ok(data) => match read_data(data) {
+            Some(data) => data,
+            None => {
+                println!("Data could not be restored.");
+                Data::new(AppState {
+                    default_departures: RwLock::new(HashMap::new()),
+                    default_destinations: RwLock::new(HashMap::new()),
+                })
+            }
         },
         Err(_) => {
             println!("No data could be restored.");
