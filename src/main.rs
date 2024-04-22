@@ -164,9 +164,9 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
             let sens = get_sens(from_stop_id, to_stop_id);
             let time_left = get_time_left(from_stop_id, 327, sens).await?;
             match time_left {
-                Some(time_left) if time != 0 => Ok(format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tram à {departure}. Le tram vous emmènera à {destination}.")),
-                Some(time_left) => Ok(format!("Vous avez {time_left} minutes pour prendre le prochain tram à {departure} se rendant à {destination}.")),
-                None => Ok(format!("Il n'y a pas de tram pour aller de {departure} à {destination} dans les prochaines heures."))
+                Some(time_left) if time != 0 => Ok(format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tramway à {departure}. Le tramway vous emmènera à {destination}.")),
+                Some(time_left) => Ok(format!("Vous avez {time_left} minutes pour prendre le prochain tramway à {departure} se rendant à {destination}.")),
+                None => Ok(format!("Il n'y a pas de tramway pour aller de {departure} à {destination} dans les prochaines heures."))
             }
         }
         _ => Err(String::from("Désolé, je ne suis pas capable de traiter cette requête"))
@@ -216,8 +216,8 @@ async fn index(req: HttpRequest, info: Json<Value>, data: Data<AppState>) -> imp
                                 "outputSpeech": {
                                     "type": "PlainText",
                                     "text": match time != 0 {
-                                        true => format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tram à {departure}. Le tram vous emmènera à {destination}."),
-                                        false => format!("Vous avez {time_left} minutes pour prendre le prochain tram à {departure} se rendant à {destination}.")
+                                        true => format!("Vous avez {time_left} minutes avant de devoir partir pour prendre le prochain tramway à {departure}. Le tramway vous emmènera à {destination}."),
+                                        false => format!("Vous avez {time_left} minutes pour prendre le prochain tramway à {departure} se rendant à {destination}.")
                                     }
                                 },
                                 "shouldEndSession": false
