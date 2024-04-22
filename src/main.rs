@@ -5,7 +5,7 @@ use std::{collections::HashMap, env, time::Duration};
 use serde::Deserialize;
 use actix_web::{get, post, rt::spawn, web::{Data, Json}, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use serde_json::{json, Value};
-use string_tools::get_all_between_strict;
+use string_tools::{get_all_before_strict, get_all_between_strict};
 use tokio::{sync::RwLock, time::sleep, fs};
 
 // Best doc : https://developer.amazon.com/en-US/docs/alexa/custom-skills/request-and-response-json-reference.html#request-format
@@ -89,14 +89,16 @@ async fn get_route(stop_id: usize, line_id: usize, sens: usize) -> Result<Option
     let response = reqwest::Client::new().post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
-        .body(dbg!(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={stop_id}&lineId={line_id}&sens={sens}")))
+        .body(format!("destinations=%7B%221%22%3A%22%22%7D&stopId={stop_id}&lineId={line_id}&sens={sens}"))
         .send().await.map_err(|e| format!("Erreur lors de la requête: {e}"))?;
     let response = response.text().await.map_err(|e| format!("Erreur lors de la lecture de la réponse: {e}"))?;
     if response.contains("Pas de prochain") {
         return Ok(None);
     }
-    let time = get_all_between_strict(&response, " ", "<abbr title=\"minutes\">").ok_or(String::from("Horaires indisponibles"))?;
-    let time = time.parse::<usize>().map_err(|_| String::from("Horaires invalides."))?;
+    let response = get_all_before_strict(&response, "<abbr title=\"minutes\">")
+        .and_then(|s| s.rfind(|c: char| c.is_ascii_digit()).map(|i| &s[i..]))
+        .ok_or(String::from("Horaires indisponibles"))?;
+    let time = response.parse::<usize>().map_err(|_| String::from("Horaires invalides."))?;
 
     Ok(Some(time))
 }
