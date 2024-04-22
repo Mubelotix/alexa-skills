@@ -131,7 +131,10 @@ async fn handle_intent(session: Session, intent: Intent, data: Data<AppState>) -
 
             data.write().await.default_departures.insert(session.user.user_id.clone(), (departure.clone(), time));
 
-            Ok(format!("Votre lieu de départ par défaut est maintenant {departure}. Vous ne devrez plus le préciser à chaque fois."))
+            Ok(match time {
+                0 => format!("Votre lieu de départ par défaut est maintenant {departure}."),
+                time => format!("Votre lieu de départ par défaut est maintenant à {time} minutes de {departure}.")
+            })
         },
         "SetDefaultDestination" => {
             let destination = intent.slots.get("destination").and_then(|d| d.value.as_ref()).ok_or(String::from("Lieu de destination manquant."))?;
